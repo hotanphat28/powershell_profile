@@ -68,9 +68,9 @@ Import-SafeModule "Terminal-Icons"
 # Dynamic Shell Detection
 $ShellType = if ($PSVersionTable.PSVersion.Major -ge 6) { "pwsh" } else { "powershell" }
 
-# Initialize Oh My Posh
+# Initialize Oh My Posh (no custom cache — oh-my-posh caches its own init script, and session IDs must be unique per session)
 Run-IfAvailable -ToolName "oh-my-posh" -Command {
-    Invoke-CachedInit "oh-my-posh" "oh-my-posh init $ShellType --config '$HOME/.poshthemes/hotanphat2.omp.json'"
+    oh-my-posh init $ShellType --config "$HOME\.poshthemes\hotanphat2.omp.json" | Invoke-Expression
 }
 
 # Initialize Zoxide
@@ -99,7 +99,7 @@ Set-PSReadLineOption -Colors $BrandColors
 function Edit-Profile { & $Global:Editor $PROFILE }
 
 function Reload-Profile {
-    & $PROFILE
+    . $PROFILE
     Write-Host '[V] Profile Reloaded' -ForegroundColor Cyan
 }
 
@@ -111,20 +111,23 @@ function sudo {
             Start-Process wt -Verb RunAs
             return
         }
-        $ArgString = "new-tab -p $Shell -- $Shell -NoExit -Command `"$args`""
+        $CmdString = $args -join ' '
+        $ArgString = "new-tab -p $Shell -- $Shell -NoExit -Command `"$CmdString`""
         Start-Process wt -Verb RunAs -ArgumentList $ArgString
     } else {
-        Start-Process $Shell -Verb RunAs -ArgumentList '-NoExit', '-Command', "$args"
+        Start-Process $Shell -Verb RunAs -ArgumentList '-NoExit', '-Command', ($args -join ' ')
     }
 }
 
-function grep { $Input | Select-String -Pattern $args }
+function grep { $Input | Select-String -Pattern $args[0] }
 
 function touch {
-    if (-not (Test-Path $args)) {
-        New-Item -ItemType File -Path $args | Out-Null
-    } else {
-        (Get-Item $args).LastWriteTime = Get-Date
+    foreach ($file in $args) {
+        if (-not (Test-Path $file)) {
+            New-Item -ItemType File -Path $file | Out-Null
+        } else {
+            (Get-Item $file).LastWriteTime = Get-Date
+        }
     }
 }
 
@@ -135,7 +138,8 @@ function .. { Set-Location .. }
 function ... { Set-Location ../.. }
 
 function ll {
-    Run-IfAvailable -ToolName 'eza' -Command { eza -lah --icons --git $args } -Fallback { Get-ChildItem -Force @args | Format-Table -AutoSize }
+    $passArgs = $args
+    Run-IfAvailable -ToolName 'eza' -Command { eza -lah --icons --git @passArgs } -Fallback { Get-ChildItem -Force @passArgs | Format-Table -AutoSize }
 }
 
 # Git Workflow
@@ -158,7 +162,7 @@ function lazyg {
 }
 
 function gnew { 
-    if ($args[1]) { git checkout -b $args[0] $args[1] } else { git checkout -b $args[0] }
+    if ($args.Count -gt 1) { git checkout -b $args[0] $args[1] } else { git checkout -b $args[0] }
 }
 
 # WSL Utilities
